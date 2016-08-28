@@ -61,8 +61,24 @@ int  My402ListAppend(My402List* list, void* obj){
   newNode->prev=lastNode;
   lastNode->next=newNode;
   newNode->next=&list->anchor;
-  list->anchor.next=lastNode;
-  lastNode->prev=&list->anchor;
   list->anchor.prev=newNode;
+  return 0;
+}
+
+int  My402ListPrepend(My402List* list, void* obj){
+  My402ListElem* newNode=malloc(sizeof(My402ListElem));
+  newNode->obj=obj;
+  My402ListElem* firstNode=My402ListFirst(list);
+  if(My402ListEmpty(list)){
+    newNode->prev=&list->anchor;
+    newNode->next=&list->anchor;
+    list->anchor.prev=newNode;
+    list->anchor.next=newNode;
+    return 0;
+  }
+  newNode->next=firstNode;
+  firstNode->prev=newNode;
+  newNode->prev=&list->anchor;
+  list->anchor.next=newNode;
   return 0;
 }
