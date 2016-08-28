@@ -58,6 +58,9 @@ typedef struct tagMy402List {
 
 extern int My402ListEmpty(My402List*);
 extern int My402ListInit(My402List*);
-
+extern int  My402ListAppend(My402List*, void*);
+extern My402ListElem *My402ListNext(My402List*, My402ListElem*);
+extern My402ListElem *My402ListFirst(My402List*);
+extern My402ListElem *My402ListLast(My402List*);
 
 #endif /*_MY402LIST_H_*/
