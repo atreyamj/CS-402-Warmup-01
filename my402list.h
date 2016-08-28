@@ -56,23 +56,8 @@ typedef struct tagMy402List {
     My402ListElem *(*Find)(struct tagMy402List *, void *obj);
 } My402List;
 
-extern int  My402ListLength(My402List*);
-extern int  My402ListEmpty(My402List*);
-
-extern int  My402ListAppend(My402List*, void*);
-extern int  My402ListPrepend(My402List*, void*);
-extern void My402ListUnlink(My402List*, My402ListElem*);
-extern void My402ListUnlinkAll(My402List*);
-extern int  My402ListInsertAfter(My402List*, void*, My402ListElem*);
-extern int  My402ListInsertBefore(My402List*, void*, My402ListElem*);
-
-extern My402ListElem *My402ListFirst(My402List*);
-extern My402ListElem *My402ListLast(My402List*);
-extern My402ListElem *My402ListNext(My402List*, My402ListElem*);
-extern My402ListElem *My402ListPrev(My402List*, My402ListElem*);
-
-extern My402ListElem *My402ListFind(My402List*, void*);
-
+extern int My402ListEmpty(My402List*);
 extern int My402ListInit(My402List*);
+
 
 #endif /*_MY402LIST_H_*/
