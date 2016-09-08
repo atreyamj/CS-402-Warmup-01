@@ -1,33 +1,59 @@
-#include "cs402.h"
-#include "my402list.h"
+ #include "cs402.h"
+ #include "my402list.h"
 
-#include <ctype.h>
-#include <dirent.h>
-#include <errno.h>
-#include <locale.h>
-#include <stdbool.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <sys/time.h>
-#include <sys/types.h>
-#include <time.h>
-
-
+ #include <ctype.h>
+ #include <dirent.h>
+ #include <errno.h>
+ #include <locale.h>
+ #include <stdbool.h>
+ #include <stdio.h>
+ #include <stdlib.h>
+ #include <string.h>
+ #include <sys/time.h>
+ #include <sys/types.h>
+ #include <time.h>
 
 
-extern int errno;
-typedef struct t_file_Transactions {
-	bool isDeposit;
-	time_t transactionTime;
-	double transactionAmount;
-	char *transactionDescription;
-} TransactionRecord;
+
+
+ extern int errno;
+ typedef struct t_file_Transactions {
+ 	bool isDeposit;
+ 	time_t transactionTime;
+ 	int transactionAmountInDollars;
+ 	double transactionAmountInCents;
+ 	char *transactionDescription;
+ } TransactionRecord;
 
 
 static char gszProgName[MAXPATHLENGTH];
 
 int gnDebug=0;
+
+/* ----------------------- Utility Functions ----------------------- */
+
+static
+void Usage()
+{
+    fprintf(stderr,
+            "usage: %s %s\n",
+            gszProgName, "test");
+    exit(-1);
+}
+
+static
+void SetProgramName(char *s)
+{
+    char *c_ptr=strrchr(s, DIR_SEP);
+
+    if (c_ptr == NULL) {
+        strcpy(gszProgName, s);
+    } else {
+        strcpy(gszProgName, ++c_ptr);
+    }
+}
+
+
 
 int isDirectory(const char* fileName)
 {
@@ -47,14 +73,6 @@ int isDirectory(const char* fileName)
 }
 
 
-void printUsage()
-{
-	fprintf(stderr,
-		"usage: %s %s\n",
-		gszProgName, "sort [tfile]");
-		exit(-1);
-	}
-
 	FILE *getFileHandler(int argc, char* argv[])
 	{
 		if(argc!=3 && argc!=2){
@@ -63,23 +81,23 @@ void printUsage()
 		}
 		if(argv==NULL){
 			fprintf(stderr,"No Options Provided\n");
-			printUsage();
+			Usage();
 			return NULL;
 		}
 		if(!argv[0] ){
 			fprintf(stderr,"Empty Options Provided\n");
-			printUsage();
+			Usage();
 			return NULL;
 		}
 
 		if(strlen(argv[0])==0){
 			fprintf(stderr,"Empty Options Provided\n");
-			printUsage();
+			Usage();
 			return NULL;
 		}
 		if(strncmp(argv[1],"sort",4)!=0){
 			fprintf(stderr,"Invalid Option Provided\n");
-			printUsage();
+			Usage();
 			return NULL;
 		}
 		if(argv[2]){
@@ -102,8 +120,6 @@ void printUsage()
 		}
 
 	}
-
-
 
 	int isValidTransactionType(char* type,int count){
 		if(type==NULL){
@@ -160,7 +176,11 @@ void printUsage()
 			fprintf(stderr,"Error: [Line %d]: Invalid Transaction Amount...\nError details: transaction amount is empty\n",count);
 			return FALSE;
 		}
-		if(!isdigit(transactionAmount[0])){
+		if(atoi(transactionAmount)<0){
+			fprintf(stderr,"Error: [Line %d]: Invalid Transaction Amount...\nError details: transaction amount is too less( < 0 )\n",count);
+			return FALSE;
+		}
+		if(!isdigit(transactionAmount[0]) && !isdigit(transactionAmount[strlen(transactionAmount)-1])){
 			fprintf(stderr,"Error: [Line %d]: Invalid Transaction Amount...\nError details: transaction amount is missing\n",count);
 			return FALSE;
 		}
@@ -173,21 +193,22 @@ void printUsage()
 			return FALSE;
 		}
 		if(rightPart==NULL){
-			if(strlen(leftPart)>7 || atoi(leftPart)>10000000){
-				fprintf(stderr,"Error: [Line %d]: Invalid Transaction Amount...\nError details: transaction amount is too long\n",count);
-				return FALSE;
-			}
-			return TRUE;
+			fprintf(stderr,"Error: [Line %d]: Invalid Transaction Amount...\nError details: Missing decimal(.) point in transaction amount\n",count);
+			return FALSE;
 		}
 		if(strlen(leftPart)>7 || strlen(rightPart)>2){
 			fprintf(stderr,"Error: [Line %d]: Invalid Transaction Amount...\nError details: transaction amount is too long\n",count);
+			return FALSE;
+		}
+		if(strlen(rightPart)<2){
+			fprintf(stderr,"Error: [Line %d]: Invalid Transaction Amount...\nError details: transaction amount is too short( two digits after decimal are not present)\n",count);
 			return FALSE;
 		}
 		if(atoi(leftPart)>10000000){
 			fprintf(stderr,"Error: [Line %d]: Invalid Transaction Amount...\nError details: transaction amount is too long\n",count);
 			return FALSE;
 		}
-		if(atoi(leftPart)<0){
+        if(atoi(leftPart)<0){
 			fprintf(stderr,"Error: [Line %d]: Invalid Transaction Amount...\nError details: transaction amount is too less( < 0 )\n",count);
 			return FALSE;
 		}
@@ -231,7 +252,7 @@ void printUsage()
 			return FALSE;
 		}
 		if(strlen(transactionRecord)>1024){
-			fprintf(stderr,"Error: [Line %d]: Invalid Transaction...\nError details: transaction is too lengthy\n",count);
+			fprintf(stderr,"Error: [Line %d]: Invalid Transaction...\nError details: transaction on this line is too lengthy\n",count);
 			return FALSE;
 		}
 		char* transaction=(char*)(malloc(strlen(transactionRecord) * sizeof(char)));
@@ -257,7 +278,6 @@ void printUsage()
 		if(!isValidDescription(transactionDescription,count)){
 			return FALSE;
 		}
-
 		free(transaction);
 		return TRUE;
 
@@ -277,10 +297,13 @@ void printUsage()
 		}
 		My402ListElem* elem = NULL;
 		int i=1;
+		/***
+				sorting
+		***/
 		for(elem=My402ListFirst(list);elem!=NULL;elem=My402ListNext(list,elem)){
 			TransactionRecord *transaction = (TransactionRecord *) elem->obj;
 			if(transaction->transactionTime==transactionRecord->transactionTime){
-				fprintf(stderr,"Error: [Line %d and %d]: Duplicate Transaction. Found two transactions having same transaction time\n",count,i);
+				fprintf(stderr,"Error: [Line %d ]: Duplicate Transaction. Found two transactions having same transaction time\n",count);
 				return FALSE;
 			}
 			if(transaction->transactionTime>transactionRecord->transactionTime){
@@ -299,16 +322,110 @@ void printUsage()
 		return TRUE;
 	}
 
-	int parseTransactions(FILE* fileHandler){
+    int writeHeader(FILE* outputFileHandler){
+        if(outputFileHandler==NULL){
+            fprintf(stderr,"Error initialising output to stdout\n");
+            return FALSE;
+        }
+        fprintf(outputFileHandler,"+-----------------+--------------------------+----------------+----------------+\n");
+        fprintf(outputFileHandler,"|       Date      | Description              |         Amount |        Balance |\n");
+        fprintf(outputFileHandler,"+-----------------+--------------------------+----------------+----------------+\n");
+        return TRUE;
+
+    }
+
+    void writeTime(char* transactionTime, FILE *outputFileHandler){
+        if(transactionTime==NULL){
+            return;
+        }
+        fprintf(outputFileHandler,"| ");
+        if(transactionTime[8] == '0'){
+          transactionTime[8] = ' ';
+        }
+        fprintf(outputFileHandler,"%s",transactionTime);
+        fprintf(outputFileHandler," | ");
+    }
+
+    void writeDescription(char* transactionDescription, FILE *outputFileHandler)
+    {
+        if(transactionDescription==NULL || outputFileHandler == NULL){
+            return;
+        }
+        if (strlen(transactionDescription) > 24){
+            transactionDescription[24]='\0';
+        }
+        fprintf(outputFileHandler, "%-24s |", transactionDescription);
+    }
+
+    void writeAmount_Balance(bool isDeposit,double transactionAmount,double* transactionBalance,FILE *outputFileHandler){
+        if(isDeposit==TRUE){
+            *transactionBalance=(*transactionBalance)+transactionAmount;
+            if(transactionAmount > 10000000.0){
+                fprintf(outputFileHandler, "   ?,???,???.?? |");
+            }
+            else{
+                fprintf(outputFileHandler, " %'13.2Lf  |", (long double)transactionAmount);
+            }
+        }
+        else if(isDeposit==FALSE){
+            *transactionBalance=(*transactionBalance)-transactionAmount;
+            if(transactionAmount > 10000000.0){
+                fprintf(outputFileHandler, "   ?,???,???.?? |");
+            }
+            else{
+                fprintf(outputFileHandler, " (%'12.2Lf) |", (long double)transactionAmount);
+            }
+        }
+        if((*transactionBalance) < 10000000.0 && (*transactionBalance) >= 0.0){
+            fprintf(outputFileHandler, " %'13.2Lf  |",(long double)(*transactionBalance));
+        }
+        else if((*transactionBalance) < 0.0){
+            double transact= (*transactionBalance) * -1.0;
+            fprintf(outputFileHandler, " (%'12.2Lf) |", (long double)(transact));
+        }
+        else{
+            fprintf(outputFileHandler,"   ?,???,???.?? |");
+        }
+        fprintf(outputFileHandler,"\n");
+    }
+
+    int writeTransactions(My402List *list, FILE *outputFileHandler,double* transactionBalance){
+        if(My402ListEmpty(list)){
+            fprintf(stderr,"Error: Transactions cannot be output as the list is empty\n");
+            return FALSE;
+        }
+        My402ListElem* elem = NULL;
+        time_t transactionTime;
+        char time[20]="";
+        char* transactionDescription=NULL;
+        setlocale(LC_NUMERIC,"en_US");
+        for(elem=My402ListFirst(list);elem!=NULL;elem=My402ListNext(list,elem)){
+            transactionTime = ((TransactionRecord *)elem->obj)->transactionTime;
+            strftime(time, 20, "%a %b %d %Y", localtime(&transactionTime));
+            writeTime(time,outputFileHandler);
+            transactionDescription=((TransactionRecord *)elem->obj)->transactionDescription;
+            writeDescription(transactionDescription,outputFileHandler);
+            writeAmount_Balance(((TransactionRecord *)elem->obj)->isDeposit,(double)( ((TransactionRecord *)elem->obj)->transactionAmountInDollars+((TransactionRecord *)elem->obj)->transactionAmountInCents),transactionBalance,outputFileHandler);
+        }
+
+    return TRUE;
+    }
+
+    int writeFooter(FILE* outputFileHandler){
+        if(outputFileHandler==NULL){
+            fprintf(stderr,"Error initialising output to stdout\n");
+            return FALSE;
+        }
+        fprintf(outputFileHandler,"+-----------------+--------------------------+----------------+----------------+\n");
+        return TRUE;
+
+    }
+
+	int parseTransactions(My402List* list, FILE* fileHandler){
 		if(fileHandler == NULL){
 			return FALSE;
 		}
 		char* transaction=(char*)(malloc(1026*sizeof(char)));
-		My402List list;
-		if(!My402ListInit(&list)){
-            fprintf(stderr,"Error Initializing the list..\n");
-			return FALSE;
-		}
 		if(transaction==NULL){
 			fprintf(stderr,"Error reading transactions...\nError details: Memory allocation failed while reading the transactions line by line\n");
 			return FALSE;
@@ -330,34 +447,20 @@ void printUsage()
 			if(strtok(NULL,"\t\n")){
 				fprintf(stderr,"Error: [Line %d]: Too Many Fields.. \n",count);
 				return FALSE;
-			}
-			if(!isValidTransactionType(type,count)){
-				return FALSE;
-			}
+            }
 			if(strncmp(type,"+",1)==0){
 				transactionLine->isDeposit=true;
 			}
 			else{
 				transactionLine->isDeposit=false;
 			}
-
-			if(!isValidTimeStamp(timeStamp,count)){
-				return FALSE;
-			}
 			transactionLine->transactionTime=atoi(timeStamp);
-
-			if(!isValidTransactionAmount(transactionAmount,count)){
-				return FALSE;
-			}
-			transactionLine->transactionAmount=atof(transactionAmount);
-
+			transactionLine->transactionAmountInCents=atof(transactionAmount)-atoi(transactionAmount);
+			transactionLine->transactionAmountInDollars=atoi(transactionAmount);
 			transactionDescription=trimDescription(transactionDescription);
-			if(!isValidDescription(transactionDescription,count)){
-				return FALSE;
-			}
 			transactionLine->transactionDescription=(char*)(malloc(strlen(transactionDescription)));
 			strcpy(transactionLine->transactionDescription,transactionDescription);
-			if(!insertIntoList(&list,transactionLine,count)){
+			if(!insertIntoList(list,transactionLine,count)){
 				return FALSE;
 			}
 			count++;
@@ -370,20 +473,37 @@ void printUsage()
 	}
 
 
-	int test(int argc, char* argv[]){
-		FILE *fileHandler=getFileHandler(argc, argv);
+/* ----------------------- main() ----------------------- */
+
+int main(int argc, char *argv[])
+{
+    SetProgramName(*argv);
+    FILE *fileHandler=getFileHandler(argc, argv);
+		double transactionBalance=0.0;
+		My402List list;
+		if(!My402ListInit(&list)){
+            fprintf(stderr,"Error Initializing the list..\n");
+			return FALSE;
+		}
 		if(fileHandler==NULL){
 			fprintf(stderr,"Error occured during accessing transaction data\nExiting..\n");
 			return -1;
 		}
-		if(!parseTransactions(fileHandler)){
+		if(!parseTransactions(&list,fileHandler)){
             fprintf(stderr,"Exiting..\n");
             exit(-1);
 		}
-		return 0;
-	}
-
-	int main(int argc, char* argv[]){
-		test(argc, argv);
-		return 0;
-	}
+		if(!writeHeader(stdout)){
+            fprintf(stderr,"Exiting\n");
+            exit(-1);
+		}
+		if(!writeTransactions(&list,stdout,&transactionBalance)){
+            fprintf(stderr,"Exiting\n");
+            exit(-1);
+		}
+		if(!writeFooter(stdout)){
+            fprintf(stderr,"Exiting\n");
+            exit(-1);
+		}
+    return(0);
+}
